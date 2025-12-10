@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Icon from '@/components/ui/icon';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
+import ContactsSection from '@/components/ContactsSection';
+import CallsSection from '@/components/CallsSection';
+import MediaSection from '@/components/MediaSection';
+import ProfileSection from '@/components/ProfileSection';
+import CallScreen from '@/components/CallScreen';
+import { toast } from 'sonner';
 
 type Chat = {
   id: number;
@@ -20,9 +26,13 @@ type Chat = {
 
 type Message = {
   id: number;
-  text: string;
+  text?: string;
   time: string;
   sent: boolean;
+  type?: 'text' | 'image' | 'file';
+  fileName?: string;
+  fileSize?: string;
+  imageUrl?: string;
 };
 
 const mockChats: Chat[] = [
@@ -36,23 +46,55 @@ const mockChats: Chat[] = [
 const Index = () => {
   const [selectedChat, setSelectedChat] = useState<Chat | null>(mockChats[0]);
   const [messages, setMessages] = useState<Message[]>([
-    { id: 1, text: 'Привет! Как дела?', time: '14:30', sent: false },
-    { id: 2, text: 'Отлично! Работаю над новым проектом', time: '14:31', sent: true },
-    { id: 3, text: 'Звучит интересно! Расскажешь подробнее?', time: '14:32', sent: false },
+    { id: 1, text: 'Привет! Как дела?', time: '14:30', sent: false, type: 'text' },
+    { id: 2, text: 'Отлично! Работаю над новым проектом', time: '14:31', sent: true, type: 'text' },
+    { id: 3, text: 'Звучит интересно! Расскажешь подробнее?', time: '14:32', sent: false, type: 'text' },
   ]);
   const [newMessage, setNewMessage] = useState('');
   const [activeSection, setActiveSection] = useState('chats');
   const [themeColor, setThemeColor] = useState(0);
   const [fontSize, setFontSize] = useState(16);
+  const [isInCall, setIsInCall] = useState(false);
+  const [callType, setCallType] = useState<'voice' | 'video'>('voice');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSendMessage = () => {
     if (newMessage.trim()) {
       setMessages([
         ...messages,
-        { id: messages.length + 1, text: newMessage, time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), sent: true }
+        { id: messages.length + 1, text: newMessage, time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), sent: true, type: 'text' }
       ]);
       setNewMessage('');
     }
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const isImage = file.type.startsWith('image/');
+      const newMsg: Message = {
+        id: messages.length + 1,
+        time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+        sent: true,
+        type: isImage ? 'image' : 'file',
+        fileName: file.name,
+        fileSize: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
+        imageUrl: isImage ? URL.createObjectURL(file) : undefined,
+      };
+      setMessages([...messages, newMsg]);
+      toast.success(isImage ? 'Изображение отправлено' : 'Файл отправлен');
+    }
+  };
+
+  const handleStartCall = (type: 'voice' | 'video') => {
+    setCallType(type);
+    setIsInCall(true);
+    toast.success(`${type === 'video' ? 'Видео' : 'Аудио'}звонок начат`);
+  };
+
+  const handleEndCall = () => {
+    setIsInCall(false);
+    toast.info('Звонок завершён');
   };
 
   const themeGradients = [
@@ -192,9 +234,26 @@ const Index = () => {
         </ScrollArea>
       </div>
 
-      <div className="flex-1 flex flex-col">
-        {selectedChat ? (
-          <>
+      {isInCall && selectedChat && (
+        <CallScreen
+          contactName={selectedChat.name}
+          contactAvatar={selectedChat.avatar}
+          callType={callType}
+          themeGradients={themeGradients}
+          themeColor={themeColor}
+          onEndCall={handleEndCall}
+        />
+      )}
+
+      {activeSection === 'contacts' && <ContactsSection themeGradients={themeGradients} themeColor={themeColor} />}
+      {activeSection === 'calls' && <CallsSection themeGradients={themeGradients} themeColor={themeColor} onStartCall={handleStartCall} />}
+      {activeSection === 'media' && <MediaSection themeGradients={themeGradients} themeColor={themeColor} />}
+      {activeSection === 'profile' && <ProfileSection themeGradients={themeGradients} themeColor={themeColor} />}
+
+      {activeSection === 'chats' && (
+        <div className="flex-1 flex flex-col">
+          {selectedChat ? (
+            <>
             <div className="h-16 bg-card border-b border-border px-6 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Avatar className="w-10 h-10">
@@ -212,10 +271,10 @@ const Index = () => {
               </div>
               
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" className="hover:scale-110 transition-transform">
+                <Button variant="ghost" size="icon" className="hover:scale-110 transition-transform" onClick={() => handleStartCall('voice')}>
                   <Icon name="Phone" size={20} />
                 </Button>
-                <Button variant="ghost" size="icon" className="hover:scale-110 transition-transform">
+                <Button variant="ghost" size="icon" className="hover:scale-110 transition-transform" onClick={() => handleStartCall('video')}>
                   <Icon name="Video" size={20} />
                 </Button>
                 <Button variant="ghost" size="icon" className="hover:scale-110 transition-transform">
@@ -231,26 +290,81 @@ const Index = () => {
                     key={message.id}
                     className={`flex ${message.sent ? 'justify-end' : 'justify-start'} message-bubble`}
                   >
-                    <div
-                      className={`max-w-md px-4 py-3 rounded-2xl ${
-                        message.sent
-                          ? `bg-gradient-to-br ${themeGradients[themeColor]} text-white`
-                          : 'bg-muted text-foreground'
-                      }`}
-                    >
-                      <p className="text-sm">{message.text}</p>
-                      <span className={`text-xs mt-1 block ${message.sent ? 'text-white/70' : 'text-muted-foreground'}`}>
-                        {message.time}
-                      </span>
-                    </div>
+                    {message.type === 'image' ? (
+                      <div
+                        className={`max-w-sm rounded-2xl overflow-hidden ${
+                          message.sent
+                            ? 'bg-gradient-to-br ' + themeGradients[themeColor]
+                            : 'bg-muted'
+                        } p-1`}
+                      >
+                        <img
+                          src={message.imageUrl}
+                          alt="Attached"
+                          className="rounded-xl w-full h-auto"
+                        />
+                        <div className={`px-3 py-2 ${message.sent ? 'text-white' : 'text-foreground'}`}>
+                          <p className="text-xs">{message.fileName}</p>
+                          <span className={`text-xs ${message.sent ? 'text-white/70' : 'text-muted-foreground'}`}>
+                            {message.time}
+                          </span>
+                        </div>
+                      </div>
+                    ) : message.type === 'file' ? (
+                      <div
+                        className={`max-w-md px-4 py-3 rounded-2xl flex items-center gap-3 ${
+                          message.sent
+                            ? `bg-gradient-to-br ${themeGradients[themeColor]} text-white`
+                            : 'bg-muted text-foreground'
+                        }`}
+                      >
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                          message.sent ? 'bg-white/20' : 'bg-primary/10'
+                        }`}>
+                          <Icon name="FileText" size={20} />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{message.fileName}</p>
+                          <p className={`text-xs ${message.sent ? 'text-white/70' : 'text-muted-foreground'}`}>
+                            {message.fileSize} • {message.time}
+                          </p>
+                        </div>
+                        <Icon name="Download" size={18} className="opacity-70" />
+                      </div>
+                    ) : (
+                      <div
+                        className={`max-w-md px-4 py-3 rounded-2xl ${
+                          message.sent
+                            ? `bg-gradient-to-br ${themeGradients[themeColor]} text-white`
+                            : 'bg-muted text-foreground'
+                        }`}
+                      >
+                        <p className="text-sm">{message.text}</p>
+                        <span className={`text-xs mt-1 block ${message.sent ? 'text-white/70' : 'text-muted-foreground'}`}>
+                          {message.time}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </ScrollArea>
 
             <div className="p-4 bg-card border-t border-border">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+                className="hidden"
+                accept="image/*,.pdf,.doc,.docx,.txt,.xlsx"
+              />
               <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" className="hover:scale-110 transition-transform">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="hover:scale-110 transition-transform"
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   <Icon name="Paperclip" size={20} />
                 </Button>
                 <Input
@@ -284,7 +398,8 @@ const Index = () => {
             </div>
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
